@@ -54,7 +54,10 @@ export default function HUD({ state }: HUDProps) {
               <div className="h-full bg-gradient-to-r from-gold-dark to-gold rounded-full" style={{ width: `${(state.xp % 100)}%` }} />
             </div>
             {mountedHorse && (
-              <span className="text-[8px] text-green-400 ml-1">🐴</span>
+              <span className="text-[8px] text-green-400 ml-1">🐴 {mountedHorse.speed}</span>
+            )}
+            {!mountedHorse && (
+              <span className="text-[8px] text-muted-foreground ml-1">🚶</span>
             )}
           </div>
         </div>

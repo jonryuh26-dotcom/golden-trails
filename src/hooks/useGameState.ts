@@ -6,6 +6,7 @@ export interface Horse {
   id: string;
   name: string;
   rarity: HorseRarity;
+  speed: number; // speed bonus (reduces travel time)
   isAdult: boolean;
   lastFedAt: number;
   dead: boolean;
@@ -65,7 +66,15 @@ export interface ScrollQuest {
 export interface Raid {
   area: LocationId;
   startedAt: number;
-  endsAt: number; // 30 min lock
+  endsAt: number;
+}
+
+// Collection in progress
+export interface CollectionProgress {
+  type: 'tree' | 'herb' | 'mine';
+  index: number;
+  startedAt: number;
+  duration: number; // ms
 }
 
 export type Weather = 'clear' | 'rain' | 'snow' | 'drought';
@@ -92,21 +101,25 @@ export interface GameState {
   travelEndTime: number | null;
   weather: Weather;
   surpriseBoxAvailableAt: number;
-  // Scroll quest system
   activeScrollQuest: ScrollQuest | null;
   scrollNextSpawnAt: number;
-  // Raid system
   activeRaids: Raid[];
   raidNextCheckAt: number;
-  // Notifications
+  // Collection progress
+  activeCollection: CollectionProgress | null;
   lastNotification: { message: string; type: 'success' | 'error' | 'warning'; at: number } | null;
 }
 
-const TRAVEL_TIME_BASE = 10000;
+const TRAVEL_TIME_BASE = 12000; // base walking speed (slow)
 
-const raritySpeedMultiplier: Record<HorseRarity, number> = {
-  'comum': 0.8, 'raro': 0.6, 'épico': 0.4, 'lendário': 0.25,
+const HORSE_SPEED: Record<HorseRarity, number> = {
+  'comum': 15, 'raro': 25, 'épico': 40, 'lendário': 60,
 };
+
+// Higher speed = faster travel. Factor = base / (1 + speed/20)
+function calcTravelTime(speed: number) {
+  return Math.round(TRAVEL_TIME_BASE / (1 + speed / 20));
+}
 
 const rarityWoodBonus: Record<HorseRarity, number> = {
   'comum': 1, 'raro': 2, 'épico': 3, 'lendário': 5,
@@ -133,8 +146,13 @@ export const SEED_NAMES: Record<CropType, string> = {
 };
 
 const MINE_COOLDOWN = 120000;
-const HORSE_HUNGER_DEATH = 30 * 60 * 1000; // 30 min
-const RAID_DURATION = 30 * 60 * 1000; // 30 min lock
+const HORSE_HUNGER_DEATH = 30 * 60 * 1000;
+const RAID_DURATION = 30 * 60 * 1000;
+
+// Collection durations (short visible progress)
+const COLLECT_TREE_DURATION = 3000;
+const COLLECT_HERB_DURATION = 2000;
+const COLLECT_MINE_DURATION = 4000;
 
 function randomCooldown() {
   const options = [10, 15, 20, 25, 30];
@@ -160,10 +178,8 @@ const SCROLL_REWARDS: Record<ScrollRarity, number> = {
 };
 
 const WEATHERS: Weather[] = ['clear', 'rain', 'snow', 'drought'];
-
 const RAIDABLE_AREAS: LocationId[] = ['fazenda', 'floresta', 'mercado', 'pasto'];
 
-// Market items with costs
 export const MARKET_ITEMS = [
   { item: 'Semente Trigo', cost: 3, icon: '🌾' },
   { item: 'Semente Milho', cost: 5, icon: '🌽' },
@@ -173,6 +189,24 @@ export const MARKET_ITEMS = [
   { item: 'Escudo', cost: 40, icon: '🛡️' },
   { item: 'Ração', cost: 10, icon: '🌾' },
 ];
+
+// Gacha weights: higher weight = more likely
+export const GACHA_WEIGHTS: { rarity: HorseRarity; weight: number; name: string }[] = [
+  { rarity: 'comum', weight: 50, name: 'Cavalo Comum' },
+  { rarity: 'raro', weight: 30, name: 'Cavalo Raro' },
+  { rarity: 'épico', weight: 15, name: 'Cavalo Épico' },
+  { rarity: 'lendário', weight: 5, name: 'Cavalo Lendário' },
+];
+
+export function rollGacha(): { rarity: HorseRarity; name: string } {
+  const total = GACHA_WEIGHTS.reduce((s, w) => s + w.weight, 0);
+  let roll = Math.random() * total;
+  for (const g of GACHA_WEIGHTS) {
+    roll -= g.weight;
+    if (roll <= 0) return { rarity: g.rarity, name: g.name };
+  }
+  return GACHA_WEIGHTS[0];
+}
 
 const initialState: GameState = {
   playerName: 'Jogador',
@@ -188,7 +222,7 @@ const initialState: GameState = {
     { id: '1', type: 'vaca', hungry: false },
     { id: '2', type: 'galinha', hungry: true },
   ],
-  inventory: { 'Madeira': 3 },
+  inventory: { 'Madeira': 3, 'Caixa Gacha Cavalo': 1 },
   trees: [
     { available: true, cooldownEnd: null },
     { available: true, cooldownEnd: null },
@@ -216,9 +250,10 @@ const initialState: GameState = {
   weather: 'clear',
   surpriseBoxAvailableAt: Date.now() + 5000,
   activeScrollQuest: null,
-  scrollNextSpawnAt: Date.now() + 60000, // first scroll in 1 min
+  scrollNextSpawnAt: Date.now() + 60000,
   activeRaids: [],
   raidNextCheckAt: Date.now() + 5 * 60 * 1000,
+  activeCollection: null,
   lastNotification: null,
 };
 
@@ -242,7 +277,7 @@ export function useGameState() {
     return () => clearInterval(interval);
   }, []);
 
-  // Main tick: cooldowns, crop growth, horse hunger, scroll spawns, raids
+  // Main tick
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
@@ -273,7 +308,7 @@ export function useGameState() {
             ? { ...c, ready: true } : c
         );
 
-        // Horse hunger - kill starved horses
+        // Horse hunger
         newState.horses = s.horses.map(h => {
           if (h.dead) return h;
           if (now - h.lastFedAt >= HORSE_HUNGER_DEATH) {
@@ -281,10 +316,81 @@ export function useGameState() {
           }
           return h;
         });
-        // Unmount dead horse
         const mounted = newState.horses.find(h => h.id === newState.mountedHorseId);
         if (mounted?.dead) {
           newState.mountedHorseId = null;
+        }
+
+        // Collection progress completion
+        if (s.activeCollection && now >= s.activeCollection.startedAt + s.activeCollection.duration) {
+          const col = s.activeCollection;
+          newState.activeCollection = null;
+          if (col.type === 'tree') {
+            const horse = newState.horses.find(h => h.id === newState.mountedHorseId && !h.dead);
+            const woodAmount = horse ? rarityWoodBonus[horse.rarity] : 1;
+            if (newState.trees[col.index]?.available !== false) {
+              // Already processed
+            } else {
+              newState.inventory = { ...newState.inventory, 'Madeira': (newState.inventory['Madeira'] || 0) + woodAmount };
+              newState.xp = newState.xp + 5;
+              newState.lastNotification = { message: `🪵 +${woodAmount} Madeira`, type: 'success', at: now };
+              // Quest
+              if (newState.activeScrollQuest && !newState.activeScrollQuest.completed && newState.activeScrollQuest.objective.type === 'collect_wood') {
+                const q = newState.activeScrollQuest;
+                const newP = Math.min(q.progress + woodAmount, q.objective.target);
+                const done = newP >= q.objective.target;
+                newState.activeScrollQuest = { ...q, progress: newP, completed: done };
+                if (done) {
+                  newState.gold += q.goldReward;
+                  newState.xp += 20;
+                  newState.scrollNextSpawnAt = now + randomScrollInterval();
+                  newState.lastNotification = { message: `✅ Quest completa! +${q.goldReward} ouro`, type: 'success', at: now };
+                }
+              }
+            }
+          } else if (col.type === 'herb') {
+            const herb = newState.herbs.find(h => h.id === col.index);
+            if (herb) {
+              const itemName = herb.type === 'erva' ? 'Erva' : 'Semente Medicinal';
+              newState.inventory = { ...newState.inventory, [itemName]: (newState.inventory[itemName] || 0) + 1 };
+              newState.xp = newState.xp + 3;
+              newState.lastNotification = { message: `🌿 +1 ${itemName}`, type: 'success', at: now };
+              if (newState.activeScrollQuest && !newState.activeScrollQuest.completed && newState.activeScrollQuest.objective.type === 'collect_herbs') {
+                const q = newState.activeScrollQuest;
+                const newP = Math.min(q.progress + 1, q.objective.target);
+                const done = newP >= q.objective.target;
+                newState.activeScrollQuest = { ...q, progress: newP, completed: done };
+                if (done) {
+                  newState.gold += q.goldReward;
+                  newState.xp += 20;
+                  newState.scrollNextSpawnAt = now + randomScrollInterval();
+                  newState.lastNotification = { message: `✅ Quest completa! +${q.goldReward} ouro`, type: 'success', at: now };
+                }
+              }
+            }
+          } else if (col.type === 'mine') {
+            const slot = newState.mineSlots.find(m => m.id === col.index);
+            if (slot) {
+              const horse = newState.horses.find(h => h.id === newState.mountedHorseId && !h.dead);
+              const diamondAmount = 1 + (horse ? rarityMineBonus[horse.rarity] : 0);
+              newState.diamonds = newState.diamonds + diamondAmount;
+              newState.xp = newState.xp + 8;
+              newState.influence = Math.min(newState.maxInfluence, newState.influence + 2);
+              newState.lastNotification = { message: `💎 +${diamondAmount} Diamantes`, type: 'success', at: now };
+              if (newState.activeScrollQuest && !newState.activeScrollQuest.completed && newState.activeScrollQuest.objective.type === 'mine_ore') {
+                const q = newState.activeScrollQuest;
+                const newP = Math.min(q.progress + 1, q.objective.target);
+                const done = newP >= q.objective.target;
+                newState.activeScrollQuest = { ...q, progress: newP, completed: done };
+                if (done) {
+                  newState.gold += q.goldReward;
+                  newState.xp += 20;
+                  newState.scrollNextSpawnAt = now + randomScrollInterval();
+                  newState.lastNotification = { message: `✅ Quest completa! +${q.goldReward} ouro`, type: 'success', at: now };
+                }
+              }
+            }
+          }
         }
 
         // Scroll quest expiry
@@ -302,7 +408,7 @@ export function useGameState() {
             rarity,
             mapX: 20 + Math.random() * 60,
             mapY: 20 + Math.random() * 60,
-            expiresAt: now + 2 * 60 * 1000, // 2 min visible
+            expiresAt: now + 2 * 60 * 1000,
             objective: { ...obj },
             progress: 0,
             completed: false,
@@ -313,7 +419,6 @@ export function useGameState() {
         // Raid check
         if (now >= s.raidNextCheckAt) {
           newState.raidNextCheckAt = now + (5 + Math.random() * 10) * 60 * 1000;
-          // 30% chance of raid
           if (Math.random() < 0.3) {
             const area = RAIDABLE_AREAS[Math.floor(Math.random() * RAIDABLE_AREAS.length)];
             const alreadyRaided = newState.activeRaids.some(r => r.area === area);
@@ -337,7 +442,7 @@ export function useGameState() {
 
         return newState;
       });
-    }, 1000);
+    }, 500);
     return () => clearInterval(interval);
   }, []);
 
@@ -348,26 +453,18 @@ export function useGameState() {
 
   const getTravelTime = useCallback(() => {
     const horse = getMountedHorse();
-    if (!horse) return TRAVEL_TIME_BASE;
-    return TRAVEL_TIME_BASE * raritySpeedMultiplier[horse.rarity];
+    if (!horse) return TRAVEL_TIME_BASE; // walking speed (slow)
+    return calcTravelTime(horse.speed);
   }, [getMountedHorse]);
 
   const isAreaRaided = useCallback((area: LocationId) => {
     return stateRef.current.activeRaids.some(r => r.area === area);
   }, []);
 
+  // MOVEMENT: allowed without horse (slow walking)
   const startTravel = useCallback((locationId: LocationId) => {
     const s = stateRef.current;
     if (s.currentLocation === locationId) return;
-    if (!s.mountedHorseId) {
-      notify('🐎 Você precisa montar um cavalo para viajar!', 'error');
-      return;
-    }
-    const mounted = s.horses.find(h => h.id === s.mountedHorseId);
-    if (!mounted || mounted.dead) {
-      notify('💀 Seu cavalo morreu de fome!', 'error');
-      return;
-    }
     if (locationId === 'medicina') {
       notify('🔒 Área não desbloqueada ainda.', 'error');
       return;
@@ -393,7 +490,6 @@ export function useGameState() {
         travelingTo: null,
         travelEndTime: null,
       };
-      // Track quest progress for travel objectives
       if (dest && s.activeScrollQuest && !s.activeScrollQuest.completed) {
         const q = s.activeScrollQuest;
         if (
@@ -422,77 +518,43 @@ export function useGameState() {
 
   const accelerateTravel = useCallback(() => {
     if (stateRef.current.diamonds >= 1) {
-      setState(s => {
-        const dest = s.travelingTo;
-        let newState = {
-          ...s,
-          diamonds: s.diamonds - 1,
-          currentLocation: dest,
-          travelingTo: null,
-          travelEndTime: null,
-        };
-        return newState;
-      });
+      setState(s => ({
+        ...s,
+        diamonds: s.diamonds - 1,
+        currentLocation: s.travelingTo,
+        travelingTo: null,
+        travelEndTime: null,
+      }));
     }
   }, []);
 
+  // Collection starts a progress timer, reward given on completion via tick
   const collectTree = useCallback((index: number) => {
-    const horse = getMountedHorse();
-    const woodAmount = horse ? rarityWoodBonus[horse.rarity] : 1;
     setState(s => {
       if (!s.trees[index]?.available) return s;
-      const newInv = { ...s.inventory, 'Madeira': (s.inventory['Madeira'] || 0) + woodAmount };
-      let newState = {
+      if (s.activeCollection) {
+        return { ...s, lastNotification: { message: '⏳ Já está coletando algo!', type: 'warning', at: Date.now() } };
+      }
+      return {
         ...s,
         trees: s.trees.map((t, i) => i === index ? { available: false, cooldownEnd: Date.now() + randomCooldown() } : t),
-        inventory: newInv,
-        xp: s.xp + 5,
-        lastNotification: { message: `🪵 +${woodAmount} Madeira`, type: 'success' as const, at: Date.now() },
+        activeCollection: { type: 'tree', index, startedAt: Date.now(), duration: COLLECT_TREE_DURATION },
       };
-      // Quest progress
-      if (s.activeScrollQuest && !s.activeScrollQuest.completed && s.activeScrollQuest.objective.type === 'collect_wood') {
-        const q = s.activeScrollQuest;
-        const newP = Math.min(q.progress + woodAmount, q.objective.target);
-        const done = newP >= q.objective.target;
-        newState.activeScrollQuest = { ...q, progress: newP, completed: done };
-        if (done) {
-          newState.gold += q.goldReward;
-          newState.xp += 20;
-          newState.scrollNextSpawnAt = Date.now() + randomScrollInterval();
-          newState.lastNotification = { message: `✅ Quest completa! +${q.goldReward} ouro`, type: 'success', at: Date.now() };
-        }
-      }
-      return newState;
     });
-  }, [getMountedHorse]);
+  }, []);
 
   const collectHerb = useCallback((herbId: number) => {
     setState(s => {
       const herb = s.herbs.find(h => h.id === herbId);
       if (!herb || !herb.available) return s;
-      const itemName = herb.type === 'erva' ? 'Erva' : 'Semente Medicinal';
-      const newInv = { ...s.inventory, [itemName]: (s.inventory[itemName] || 0) + 1 };
-      let newState = {
+      if (s.activeCollection) {
+        return { ...s, lastNotification: { message: '⏳ Já está coletando algo!', type: 'warning', at: Date.now() } };
+      }
+      return {
         ...s,
         herbs: s.herbs.map(h => h.id === herbId ? { ...h, available: false, cooldownEnd: Date.now() + randomCooldown() } : h),
-        inventory: newInv,
-        xp: s.xp + 3,
-        lastNotification: { message: `🌿 +1 ${itemName}`, type: 'success' as const, at: Date.now() },
+        activeCollection: { type: 'herb', index: herbId, startedAt: Date.now(), duration: COLLECT_HERB_DURATION },
       };
-      // Quest
-      if (s.activeScrollQuest && !s.activeScrollQuest.completed && s.activeScrollQuest.objective.type === 'collect_herbs') {
-        const q = s.activeScrollQuest;
-        const newP = Math.min(q.progress + 1, q.objective.target);
-        const done = newP >= q.objective.target;
-        newState.activeScrollQuest = { ...q, progress: newP, completed: done };
-        if (done) {
-          newState.gold += q.goldReward;
-          newState.xp += 20;
-          newState.scrollNextSpawnAt = Date.now() + randomScrollInterval();
-          newState.lastNotification = { message: `✅ Quest completa! +${q.goldReward} ouro`, type: 'success', at: Date.now() };
-        }
-      }
-      return newState;
     });
   }, []);
 
@@ -536,30 +598,14 @@ export function useGameState() {
       }
       const slot = s.mineSlots.find(m => m.id === slotId);
       if (!slot || !slot.available) return s;
-      const horse = s.horses.find(h => h.id === s.mountedHorseId && !h.dead);
-      const diamondAmount = 1 + (horse ? rarityMineBonus[horse.rarity] : 0);
-      let newState = {
+      if (s.activeCollection) {
+        return { ...s, lastNotification: { message: '⏳ Já está coletando algo!', type: 'warning', at: Date.now() } };
+      }
+      return {
         ...s,
         mineSlots: s.mineSlots.map(m => m.id === slotId ? { ...m, available: false, cooldownEnd: Date.now() + MINE_COOLDOWN } : m),
-        diamonds: s.diamonds + diamondAmount,
-        xp: s.xp + 8,
-        influence: Math.min(s.maxInfluence, s.influence + 2),
-        lastNotification: { message: `💎 +${diamondAmount} Diamantes`, type: 'success' as const, at: Date.now() },
+        activeCollection: { type: 'mine', index: slotId, startedAt: Date.now(), duration: COLLECT_MINE_DURATION },
       };
-      // Quest
-      if (s.activeScrollQuest && !s.activeScrollQuest.completed && s.activeScrollQuest.objective.type === 'mine_ore') {
-        const q = s.activeScrollQuest;
-        const newP = Math.min(q.progress + 1, q.objective.target);
-        const done = newP >= q.objective.target;
-        newState.activeScrollQuest = { ...q, progress: newP, completed: done };
-        if (done) {
-          newState.gold = (newState.gold || s.gold) + q.goldReward;
-          newState.xp += 20;
-          newState.scrollNextSpawnAt = Date.now() + randomScrollInterval();
-          newState.lastNotification = { message: `✅ Quest completa! +${q.goldReward} ouro`, type: 'success', at: Date.now() };
-        }
-      }
-      return newState;
     });
   }, []);
 
@@ -578,10 +624,35 @@ export function useGameState() {
         ...s,
         gold: s.gold - cost,
         horses: [...s.horses, {
-          id: Date.now().toString(), name: `Potro ${rarity}`, rarity, isAdult: false,
+          id: Date.now().toString(), name: `Potro ${rarity}`, rarity,
+          speed: HORSE_SPEED[rarity],
+          isAdult: false,
           lastFedAt: Date.now(), dead: false,
         }],
         lastNotification: { message: `🐴 Novo potro ${rarity} comprado!`, type: 'success', at: Date.now() },
+      };
+    });
+  }, []);
+
+  // Add horse from gacha
+  const addGachaHorse = useCallback((rarity: HorseRarity, name: string) => {
+    setState(s => {
+      const aliveHorses = s.horses.filter(h => !h.dead);
+      if (aliveHorses.length >= 2) {
+        return { ...s, lastNotification: { message: '❌ Você já tem 2 cavalos vivos.', type: 'error' as const, at: Date.now() } };
+      }
+      const boxCount = s.inventory['Caixa Gacha Cavalo'] || 0;
+      if (boxCount <= 0) return s;
+      return {
+        ...s,
+        inventory: { ...s.inventory, 'Caixa Gacha Cavalo': boxCount - 1 },
+        horses: [...s.horses, {
+          id: Date.now().toString(), name, rarity,
+          speed: HORSE_SPEED[rarity],
+          isAdult: true,
+          lastFedAt: Date.now(), dead: false,
+        }],
+        lastNotification: { message: `🎉 Você ganhou um ${name}!`, type: 'success', at: Date.now() },
       };
     });
   }, []);
@@ -668,8 +739,6 @@ export function useGameState() {
   }, []);
 
   const pickupScroll = useCallback(() => {
-    // Player "accepts" the scroll quest - must travel there first handled by map click
-    // Just mark as picked up (keep it active, remove from map)
     setState(s => {
       if (!s.activeScrollQuest) return s;
       return {
@@ -693,6 +762,7 @@ export function useGameState() {
     collectTree, collectHerb,
     plantCrop, harvestCrop, mineGold,
     buyHorse, evolveHorse, mountHorse, feedHorse, removeDeadHorse,
+    addGachaHorse,
     collectSurpriseBox, buyItem,
     useShield, pickupScroll,
     goToMap, getMountedHorse, getTravelTime, isAreaRaided,

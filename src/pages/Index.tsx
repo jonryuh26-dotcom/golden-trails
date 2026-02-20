@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { useGameState, type LocationId } from '@/hooks/useGameState';
+import { useGameState, type LocationId, type HorseRarity } from '@/hooks/useGameState';
 import HUD from '@/components/game/HUD';
 import InfluenceBar from '@/components/game/InfluenceBar';
 import BottomNav, { type Tab } from '@/components/game/BottomNav';
@@ -10,6 +10,8 @@ import LocationPanel from '@/components/game/LocationPanel';
 import InventoryPanel from '@/components/game/InventoryPanel';
 import VehiclesPanel from '@/components/game/VehiclesPanel';
 import QuestsPanel from '@/components/game/QuestsPanel';
+import CollectionBar from '@/components/game/CollectionBar';
+import GachaModal from '@/components/game/GachaModal';
 import { toast } from 'sonner';
 
 export default function Index() {
@@ -17,13 +19,14 @@ export default function Index() {
     state, startTravel, completeTravel, accelerateTravel,
     collectTree, collectHerb, plantCrop, harvestCrop, mineGold,
     buyHorse, evolveHorse, mountHorse, feedHorse, removeDeadHorse,
+    addGachaHorse,
     collectSurpriseBox, buyItem, goToMap, useShield, pickupScroll,
   } = useGameState();
 
   const [tab, setTab] = useState<Tab>('mapa');
   const [viewingMap, setViewingMap] = useState(true);
+  const [gachaOpen, setGachaOpen] = useState(false);
 
-  // Show notifications as toasts
   useEffect(() => {
     if (state.lastNotification) {
       const n = state.lastNotification;
@@ -77,6 +80,14 @@ export default function Index() {
     setTab('mapa');
   }, [accelerateTravel]);
 
+  const handleOpenGacha = useCallback(() => {
+    setGachaOpen(true);
+  }, []);
+
+  const handleGachaResult = useCallback((rarity: HorseRarity, name: string) => {
+    addGachaHorse(rarity, name);
+  }, [addGachaHorse]);
+
   const showLocationPanel = tab === 'mapa' && !viewingMap && state.currentLocation;
   const showMap = tab === 'mapa' && (viewingMap || !state.currentLocation);
 
@@ -115,7 +126,13 @@ export default function Index() {
               onUseShield={useShield}
             />
           )}
-          {tab === 'inventario' && <InventoryPanel key="inv" inventory={state.inventory} />}
+          {tab === 'inventario' && (
+            <InventoryPanel
+              key="inv"
+              inventory={state.inventory}
+              onOpenGacha={handleOpenGacha}
+            />
+          )}
           {tab === 'veiculos' && (
             <VehiclesPanel
               key="veh"
@@ -137,6 +154,9 @@ export default function Index() {
         </AnimatePresence>
       </div>
 
+      {/* Collection progress bar */}
+      <CollectionBar collection={state.activeCollection} />
+
       <TravelBar
         travelingTo={state.travelingTo}
         travelEndTime={state.travelEndTime}
@@ -146,6 +166,12 @@ export default function Index() {
       />
 
       <BottomNav active={tab} onTabChange={handleTabChange} />
+
+      <GachaModal
+        open={gachaOpen}
+        onClose={() => setGachaOpen(false)}
+        onResult={handleGachaResult}
+      />
     </div>
   );
 }
