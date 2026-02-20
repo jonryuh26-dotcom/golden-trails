@@ -15,6 +15,22 @@ export interface Animal {
   hungry: boolean;
 }
 
+export type CropType = 'trigo' | 'milho' | 'cenoura';
+
+export interface CropPlot {
+  id: number;
+  crop: CropType | null;
+  plantedAt: number | null;
+  growTime: number; // ms to grow
+  ready: boolean;
+}
+
+export interface MineSlot {
+  id: number;
+  available: boolean;
+  cooldownEnd: number | null;
+}
+
 export type Weather = 'clear' | 'rain' | 'snow' | 'drought';
 export type LocationId = 'fazenda' | 'pasto' | 'estabulo' | 'mercado' | 'medicina' | 'pub' | 'floresta' | 'mina' | 'arena';
 
@@ -31,6 +47,8 @@ export interface GameState {
   animals: Animal[];
   inventory: Record<string, number>;
   trees: { available: boolean; cooldownEnd: number | null }[];
+  crops: CropPlot[];
+  mineSlots: MineSlot[];
   currentLocation: LocationId | null;
   travelingTo: LocationId | null;
   travelEndTime: number | null;
@@ -39,7 +57,7 @@ export interface GameState {
   questLocations: LocationId[];
 }
 
-const TRAVEL_TIME_BASE = 10000; // 10 seconds
+const TRAVEL_TIME_BASE = 10000;
 
 const raritySpeedMultiplier: Record<HorseRarity, number> = {
   'comum': 0.8,
@@ -54,6 +72,28 @@ const rarityWoodBonus: Record<HorseRarity, number> = {
   'épico': 3,
   'lendário': 5,
 };
+
+const rarityMineBonus: Record<HorseRarity, number> = {
+  'comum': 3,
+  'raro': 5,
+  'épico': 8,
+  'lendário': 15,
+};
+
+const CROP_GROW_TIMES: Record<CropType, number> = {
+  'trigo': 30000,    // 30s
+  'milho': 60000,    // 60s
+  'cenoura': 45000,  // 45s
+};
+
+const CROP_YIELDS: Record<CropType, { item: string; amount: number }> = {
+  'trigo': { item: 'Trigo', amount: 2 },
+  'milho': { item: 'Milho', amount: 3 },
+  'cenoura': { item: 'Cenoura', amount: 2 },
+};
+
+const MINE_COOLDOWN = 120000; // 2 min
+const MINE_BASE_GOLD = 5;
 
 const WEATHERS: Weather[] = ['clear', 'rain', 'snow', 'drought'];
 
@@ -77,11 +117,22 @@ const initialState: GameState = {
     { available: true, cooldownEnd: null },
     { available: true, cooldownEnd: null },
   ],
+  crops: [
+    { id: 0, crop: null, plantedAt: null, growTime: 0, ready: false },
+    { id: 1, crop: null, plantedAt: null, growTime: 0, ready: false },
+    { id: 2, crop: null, plantedAt: null, growTime: 0, ready: false },
+    { id: 3, crop: null, plantedAt: null, growTime: 0, ready: false },
+  ],
+  mineSlots: [
+    { id: 0, available: true, cooldownEnd: null },
+    { id: 1, available: true, cooldownEnd: null },
+    { id: 2, available: true, cooldownEnd: null },
+  ],
   currentLocation: null,
   travelingTo: null,
   travelEndTime: null,
   weather: 'clear',
-  surpriseBoxAvailableAt: Date.now() + 5000, // available shortly for demo
+  surpriseBoxAvailableAt: Date.now() + 5000,
   questLocations: ['pub', 'mercado', 'arena'],
 };
 
@@ -99,16 +150,29 @@ export function useGameState() {
     return () => clearInterval(interval);
   }, []);
 
-  // Check tree cooldowns
+  // Check tree cooldowns + mine cooldowns + crop growth
   useEffect(() => {
     const interval = setInterval(() => {
+      const now = Date.now();
       setState(s => ({
         ...s,
         trees: s.trees.map(t => {
-          if (!t.available && t.cooldownEnd && Date.now() >= t.cooldownEnd) {
+          if (!t.available && t.cooldownEnd && now >= t.cooldownEnd) {
             return { available: true, cooldownEnd: null };
           }
           return t;
+        }),
+        mineSlots: s.mineSlots.map(m => {
+          if (!m.available && m.cooldownEnd && now >= m.cooldownEnd) {
+            return { ...m, available: true, cooldownEnd: null };
+          }
+          return m;
+        }),
+        crops: s.crops.map(c => {
+          if (c.crop && c.plantedAt && !c.ready && now >= c.plantedAt + c.growTime) {
+            return { ...c, ready: true };
+          }
+          return c;
         }),
       }));
     }, 1000);
@@ -126,13 +190,15 @@ export function useGameState() {
   }, [getMountedHorse]);
 
   const startTravel = useCallback((locationId: LocationId) => {
+    // If already at this location, just stay (no re-travel needed)
+    if (state.currentLocation === locationId) return;
     const travelTime = getTravelTime();
     setState(s => ({
       ...s,
       travelingTo: locationId,
       travelEndTime: Date.now() + travelTime,
     }));
-  }, [getTravelTime]);
+  }, [getTravelTime, state.currentLocation]);
 
   const completeTravel = useCallback(() => {
     setState(s => ({
@@ -162,6 +228,48 @@ export function useGameState() {
       ...s,
       trees: s.trees.map((t, i) => i === index ? { available: false, cooldownEnd: Date.now() + 3600000 } : t),
       inventory: { ...s.inventory, 'Madeira': (s.inventory['Madeira'] || 0) + woodAmount },
+      xp: s.xp + 5,
+    }));
+  }, [getMountedHorse]);
+
+  // --- FAZENDA ---
+  const plantCrop = useCallback((plotId: number, cropType: CropType) => {
+    setState(s => ({
+      ...s,
+      crops: s.crops.map(c => c.id === plotId ? {
+        ...c,
+        crop: cropType,
+        plantedAt: Date.now(),
+        growTime: CROP_GROW_TIMES[cropType],
+        ready: false,
+      } : c),
+    }));
+  }, []);
+
+  const harvestCrop = useCallback((plotId: number) => {
+    setState(s => {
+      const plot = s.crops.find(c => c.id === plotId);
+      if (!plot || !plot.crop || !plot.ready) return s;
+      const yield_ = CROP_YIELDS[plot.crop];
+      return {
+        ...s,
+        crops: s.crops.map(c => c.id === plotId ? { ...c, crop: null, plantedAt: null, growTime: 0, ready: false } : c),
+        inventory: { ...s.inventory, [yield_.item]: (s.inventory[yield_.item] || 0) + yield_.amount },
+        xp: s.xp + 10,
+      };
+    });
+  }, []);
+
+  // --- MINA ---
+  const mineGold = useCallback((slotId: number) => {
+    const horse = getMountedHorse();
+    const goldAmount = MINE_BASE_GOLD + (horse ? rarityMineBonus[horse.rarity] : 0);
+    setState(s => ({
+      ...s,
+      mineSlots: s.mineSlots.map(m => m.id === slotId ? { ...m, available: false, cooldownEnd: Date.now() + MINE_COOLDOWN } : m),
+      gold: s.gold + goldAmount,
+      xp: s.xp + 8,
+      influence: Math.min(s.maxInfluence, s.influence + 2),
     }));
   }, [getMountedHorse]);
 
@@ -218,6 +326,9 @@ export function useGameState() {
     completeTravel,
     accelerateTravel,
     collectTree,
+    plantCrop,
+    harvestCrop,
+    mineGold,
     buyHorse,
     evolveHorse,
     mountHorse,
