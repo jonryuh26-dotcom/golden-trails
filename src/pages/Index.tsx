@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useGameState, type LocationId } from '@/hooks/useGameState';
 import HUD from '@/components/game/HUD';
@@ -15,17 +15,28 @@ import { toast } from 'sonner';
 export default function Index() {
   const {
     state, startTravel, completeTravel, accelerateTravel,
-    collectTree, plantCrop, harvestCrop, mineGold,
-    buyHorse, evolveHorse, mountHorse,
-    collectSurpriseBox, buyItem, goToMap,
+    collectTree, collectHerb, plantCrop, harvestCrop, mineGold,
+    buyHorse, evolveHorse, mountHorse, feedHorse, removeDeadHorse,
+    collectSurpriseBox, buyItem, goToMap, useShield, pickupScroll,
   } = useGameState();
 
   const [tab, setTab] = useState<Tab>('mapa');
   const [viewingMap, setViewingMap] = useState(true);
 
+  // Show notifications as toasts
+  useEffect(() => {
+    if (state.lastNotification) {
+      const n = state.lastNotification;
+      const bg = n.type === 'error' ? 'hsl(0 60% 15%)' : n.type === 'warning' ? 'hsl(30 60% 15%)' : 'hsl(30 20% 12%)';
+      const border = n.type === 'error' ? '1px solid hsl(0 60% 40% / 0.3)' : n.type === 'warning' ? '1px solid hsl(30 80% 50% / 0.3)' : '1px solid hsl(40 80% 50% / 0.3)';
+      toast(n.message, {
+        style: { background: bg, border, color: 'hsl(40 30% 90%)' },
+      });
+    }
+  }, [state.lastNotification?.at]);
+
   const handleLocationClick = useCallback((id: LocationId) => {
     if (state.travelingTo) return;
-    // If already at this location, just open the panel directly
     if (state.currentLocation === id) {
       setViewingMap(false);
       setTab('mapa');
@@ -41,6 +52,10 @@ export default function Index() {
     });
   }, [collectSurpriseBox]);
 
+  const handleScrollClick = useCallback(() => {
+    pickupScroll();
+  }, [pickupScroll]);
+
   const handleTabChange = useCallback((t: Tab) => {
     if (t === 'mapa') setViewingMap(true);
     setTab(t);
@@ -50,7 +65,6 @@ export default function Index() {
     setViewingMap(true);
   }, []);
 
-  // When travel completes, auto-open the location panel
   const handleTravelComplete = useCallback(() => {
     completeTravel();
     setViewingMap(false);
@@ -71,10 +85,14 @@ export default function Index() {
       <HUD state={state} />
       <InfluenceBar influence={state.influence} max={state.maxInfluence} />
 
-      {/* Main content */}
       <div className="absolute inset-0 pt-[65px] pb-[60px]">
         {showMap && (
-          <MapView state={state} onLocationClick={handleLocationClick} onSurpriseBox={handleSurpriseBox} />
+          <MapView
+            state={state}
+            onLocationClick={handleLocationClick}
+            onSurpriseBox={handleSurpriseBox}
+            onScrollClick={handleScrollClick}
+          />
         )}
 
         <AnimatePresence mode="wait">
@@ -85,17 +103,30 @@ export default function Index() {
               state={state}
               onBack={handleBackToMap}
               onCollectTree={collectTree}
+              onCollectHerb={collectHerb}
               onBuyHorse={buyHorse}
               onEvolveHorse={evolveHorse}
               onBuyItem={buyItem}
               onPlantCrop={plantCrop}
               onHarvestCrop={harvestCrop}
               onMineGold={mineGold}
+              onFeedHorse={feedHorse}
+              onRemoveDeadHorse={removeDeadHorse}
+              onUseShield={useShield}
             />
           )}
           {tab === 'inventario' && <InventoryPanel key="inv" inventory={state.inventory} />}
-          {tab === 'veiculos' && <VehiclesPanel key="veh" horses={state.horses} mountedId={state.mountedHorseId} onMount={mountHorse} />}
-          {tab === 'quests' && <QuestsPanel key="q" activeQuests={state.questLocations} />}
+          {tab === 'veiculos' && (
+            <VehiclesPanel
+              key="veh"
+              horses={state.horses}
+              mountedId={state.mountedHorseId}
+              onMount={mountHorse}
+              onFeed={feedHorse}
+              onRemoveDead={removeDeadHorse}
+            />
+          )}
+          {tab === 'quests' && <QuestsPanel key="q" state={state} />}
           {tab === 'config' && (
             <div key="cfg" className="absolute inset-0 z-20 bg-background/95 flex flex-col items-center justify-center">
               <span className="text-4xl">⚙️</span>

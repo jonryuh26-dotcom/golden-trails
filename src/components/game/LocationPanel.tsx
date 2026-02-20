@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import type { LocationId, GameState, HorseRarity, CropType } from '@/hooks/useGameState';
+import { SEED_NAMES, CROP_GROW_TIMES, MARKET_ITEMS } from '@/hooks/useGameState';
 
 const LOCATION_NAMES: Record<LocationId, string> = {
   fazenda: 'Fazenda', pasto: 'Pasto', estabulo: 'Estábulo',
@@ -15,10 +16,10 @@ const RARITY_COLORS: Record<HorseRarity, string> = {
   'lendário': 'text-rarity-legendary',
 };
 
-const CROP_INFO: { type: CropType; icon: string; name: string; time: string }[] = [
-  { type: 'trigo', icon: '🌾', name: 'Trigo', time: '30s' },
-  { type: 'milho', icon: '🌽', name: 'Milho', time: '60s' },
-  { type: 'cenoura', icon: '🥕', name: 'Cenoura', time: '45s' },
+const CROP_INFO: { type: CropType; icon: string; name: string; time: string; seedName: string }[] = [
+  { type: 'trigo', icon: '🌾', name: 'Trigo', time: '30s', seedName: 'Semente Trigo' },
+  { type: 'milho', icon: '🌽', name: 'Milho', time: '60s', seedName: 'Semente Milho' },
+  { type: 'cenoura', icon: '🥕', name: 'Cenoura', time: '45s', seedName: 'Semente Cenoura' },
 ];
 
 function CropGrowthTimer({ plantedAt, growTime }: { plantedAt: number; growTime: number }) {
@@ -47,17 +48,17 @@ function CropGrowthTimer({ plantedAt, growTime }: { plantedAt: number; growTime:
   );
 }
 
-function MineTimer({ cooldownEnd }: { cooldownEnd: number }) {
+function CooldownTimer({ cooldownEnd }: { cooldownEnd: number }) {
   const [remaining, setRemaining] = useState(0);
-
   useEffect(() => {
     const interval = setInterval(() => {
       setRemaining(Math.max(0, Math.ceil((cooldownEnd - Date.now()) / 1000)));
     }, 1000);
     return () => clearInterval(interval);
   }, [cooldownEnd]);
-
-  return <span className="text-[10px] text-muted-foreground">{remaining}s</span>;
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  return <span className="text-[10px] text-muted-foreground">{mins}:{String(secs).padStart(2, '0')}</span>;
 }
 
 interface Props {
@@ -65,19 +66,55 @@ interface Props {
   state: GameState;
   onBack: () => void;
   onCollectTree: (i: number) => void;
+  onCollectHerb: (id: number) => void;
   onBuyHorse: (r: HorseRarity) => void;
   onEvolveHorse: (id: string) => void;
   onBuyItem: (item: string, cost: number) => void;
   onPlantCrop: (plotId: number, crop: CropType) => void;
   onHarvestCrop: (plotId: number) => void;
   onMineGold: (slotId: number) => void;
+  onFeedHorse: (id: string) => void;
+  onRemoveDeadHorse: (id: string) => void;
+  onUseShield: (area: LocationId) => void;
 }
 
 export default function LocationPanel({
-  location, state, onBack, onCollectTree, onBuyHorse, onEvolveHorse, onBuyItem,
-  onPlantCrop, onHarvestCrop, onMineGold,
+  location, state, onBack, onCollectTree, onCollectHerb, onBuyHorse, onEvolveHorse, onBuyItem,
+  onPlantCrop, onHarvestCrop, onMineGold, onFeedHorse, onRemoveDeadHorse, onUseShield,
 }: Props) {
   const [selectedCrop, setSelectedCrop] = useState<CropType>('trigo');
+  const isRaided = state.activeRaids.some(r => r.area === location);
+
+  // Show raid block
+  if (isRaided) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        className="absolute inset-0 z-20 bg-background/95 flex flex-col"
+      >
+        <div className="glass px-4 py-3 flex items-center gap-3">
+          <button onClick={onBack} className="btn-game text-xs px-3 py-1">← Mapa</button>
+          <h2 className="font-display text-base text-red-400 flex-1">⚔️ {LOCATION_NAMES[location]} sob ataque!</h2>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
+          <span className="text-5xl">🔴</span>
+          <p className="text-sm text-red-400 font-display text-center">Esta área está bloqueada por um ataque!</p>
+          <p className="text-xs text-muted-foreground text-center">Aguarde 30 minutos ou use um Escudo.</p>
+          <p className="text-xs text-muted-foreground">Escudos: {state.inventory['Escudo'] || 0}</p>
+          {(state.inventory['Escudo'] || 0) > 0 && (
+            <button
+              onClick={() => onUseShield(location)}
+              className="btn-game text-sm px-6 py-2 flex items-center gap-2"
+            >
+              🛡️ Usar Escudo
+            </button>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -86,7 +123,6 @@ export default function LocationPanel({
       exit={{ opacity: 0, y: 40 }}
       className="absolute inset-0 z-20 bg-background/95 flex flex-col"
     >
-      {/* Header */}
       <div className="glass px-4 py-3 flex items-center gap-3">
         <button onClick={onBack} className="btn-game text-xs px-3 py-1">← Mapa</button>
         <h2 className="font-display text-base gold-text flex-1">{LOCATION_NAMES[location]}</h2>
@@ -97,24 +133,28 @@ export default function LocationPanel({
         {/* ========== FAZENDA ========== */}
         {location === 'fazenda' && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">🌱 Plante e colha suas plantações.</p>
+            <p className="text-sm text-muted-foreground">🌱 Plante e colha. Compre sementes no Mercado!</p>
 
-            {/* Crop selector */}
             <div className="flex gap-2 justify-center">
-              {CROP_INFO.map(c => (
-                <button
-                  key={c.type}
-                  onClick={() => setSelectedCrop(c.type)}
-                  className={`glass rounded-xl px-3 py-2 flex flex-col items-center gap-1 transition-all active:scale-95 ${selectedCrop === c.type ? 'gold-glow border border-gold/40' : 'opacity-70'}`}
-                >
-                  <span className="text-xl">{c.icon}</span>
-                  <span className="text-[10px] font-display text-foreground">{c.name}</span>
-                  <span className="text-[8px] text-muted-foreground">⏱ {c.time}</span>
-                </button>
-              ))}
+              {CROP_INFO.map(c => {
+                const seedCount = state.inventory[c.seedName] || 0;
+                return (
+                  <button
+                    key={c.type}
+                    onClick={() => setSelectedCrop(c.type)}
+                    className={`glass rounded-xl px-3 py-2 flex flex-col items-center gap-1 transition-all active:scale-95 ${selectedCrop === c.type ? 'gold-glow border border-gold/40' : 'opacity-70'}`}
+                  >
+                    <span className="text-xl">{c.icon}</span>
+                    <span className="text-[10px] font-display text-foreground">{c.name}</span>
+                    <span className="text-[8px] text-muted-foreground">⏱ {c.time}</span>
+                    <span className={`text-[8px] font-display ${seedCount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      🌰 {seedCount}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Plots */}
             <div className="grid grid-cols-2 gap-3">
               {state.crops.map(plot => (
                 <div key={plot.id} className="glass rounded-xl p-3 flex flex-col items-center min-h-[100px] justify-center">
@@ -124,7 +164,9 @@ export default function LocationPanel({
                       className="flex flex-col items-center gap-1 active:scale-95 transition-transform"
                     >
                       <span className="text-2xl opacity-40">🕳️</span>
-                      <span className="text-[10px] font-display text-gold">Plantar {CROP_INFO.find(c => c.type === selectedCrop)?.name}</span>
+                      <span className="text-[10px] font-display text-gold">
+                        Plantar {CROP_INFO.find(c => c.type === selectedCrop)?.name}
+                      </span>
                     </button>
                   )}
                   {plot.crop && !plot.ready && plot.plantedAt && (
@@ -155,24 +197,57 @@ export default function LocationPanel({
 
         {/* ========== FLORESTA ========== */}
         {location === 'floresta' && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">🪓 Colete madeira das árvores disponíveis.</p>
-            <div className="flex gap-4 justify-center">
-              {state.trees.map((tree, i) => (
-                <button
-                  key={i}
-                  disabled={!tree.available}
-                  onClick={() => tree.available && onCollectTree(i)}
-                  className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all active:scale-90 ${tree.available ? 'glass gold-glow' : 'bg-destructive/20 opacity-60'}`}
-                >
-                  <span className={`text-3xl ${!tree.available ? 'animate-tree-shake grayscale' : ''}`}>
-                    {tree.available ? '🌳' : '🪵'}
-                  </span>
-                  <span className="text-[10px] font-display text-foreground">
-                    {tree.available ? 'Coletar' : 'Esgotada'}
-                  </span>
-                </button>
-              ))}
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">🪓 Colete madeira e ervas.</p>
+
+            {/* Trees */}
+            <div>
+              <p className="text-xs font-display text-gold mb-2">🌳 Árvores</p>
+              <div className="flex gap-4 justify-center">
+                {state.trees.map((tree, i) => (
+                  <button
+                    key={i}
+                    disabled={!tree.available}
+                    onClick={() => tree.available && onCollectTree(i)}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all active:scale-90 ${tree.available ? 'glass gold-glow' : 'bg-destructive/20 opacity-60'}`}
+                  >
+                    <span className={`text-3xl ${!tree.available ? 'animate-tree-shake grayscale' : ''}`}>
+                      {tree.available ? '🌳' : '🪵'}
+                    </span>
+                    <span className="text-[10px] font-display text-foreground">
+                      {tree.available ? 'Coletar' : 'Esgotada'}
+                    </span>
+                    {!tree.available && tree.cooldownEnd && (
+                      <CooldownTimer cooldownEnd={tree.cooldownEnd} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Herbs */}
+            <div>
+              <p className="text-xs font-display text-gold mb-2">🌿 Ervas & Sementes Medicinais</p>
+              <div className="flex gap-4 justify-center">
+                {state.herbs.map(herb => (
+                  <button
+                    key={herb.id}
+                    disabled={!herb.available}
+                    onClick={() => herb.available && onCollectHerb(herb.id)}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all active:scale-90 ${herb.available ? 'glass gold-glow' : 'bg-destructive/20 opacity-60'}`}
+                  >
+                    <span className={`text-3xl ${!herb.available ? 'grayscale' : ''}`}>
+                      {herb.type === 'erva' ? '🌿' : '🌰'}
+                    </span>
+                    <span className="text-[10px] font-display text-foreground">
+                      {herb.available ? (herb.type === 'erva' ? 'Erva' : 'Semente') : 'Esgotado'}
+                    </span>
+                    {!herb.available && herb.cooldownEnd && (
+                      <CooldownTimer cooldownEnd={herb.cooldownEnd} />
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -180,7 +255,14 @@ export default function LocationPanel({
         {/* ========== MINA ========== */}
         {location === 'mina' && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">⛏️ Minere ouro dos veios disponíveis.</p>
+            <p className="text-sm text-muted-foreground">⛏️ Minere diamantes. Necessário: Picareta.</p>
+            <div className="glass rounded-xl p-2 text-center">
+              <p className="text-[10px] text-foreground font-display">
+                Picaretas: <span className={`${(state.inventory['Picareta'] || 0) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {state.inventory['Picareta'] || 0}
+                </span>
+              </p>
+            </div>
             <div className="flex gap-3 justify-center">
               {state.mineSlots.map(slot => (
                 <button
@@ -190,19 +272,16 @@ export default function LocationPanel({
                   className={`flex flex-col items-center gap-1 p-4 rounded-xl transition-all active:scale-90 ${slot.available ? 'glass gold-glow' : 'glass opacity-50'}`}
                 >
                   <span className={`text-3xl ${slot.available ? 'animate-float' : 'grayscale'}`}>
-                    {slot.available ? '💎' : '🪨'}
+                    {slot.available ? '🪨' : '⏳'}
                   </span>
                   <span className="text-[10px] font-display text-foreground">
                     {slot.available ? 'Minerar' : 'Esgotado'}
                   </span>
                   {!slot.available && slot.cooldownEnd && (
-                    <MineTimer cooldownEnd={slot.cooldownEnd} />
+                    <CooldownTimer cooldownEnd={slot.cooldownEnd} />
                   )}
                 </button>
               ))}
-            </div>
-            <div className="glass rounded-xl p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">💡 Cavalos melhores aumentam o ouro extraído!</p>
             </div>
           </div>
         )}
@@ -210,21 +289,49 @@ export default function LocationPanel({
         {/* ========== ESTÁBULO ========== */}
         {location === 'estabulo' && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Seus cavalos ({state.horses.length}/2)</p>
-            {state.horses.length === 0 && <p className="text-xs text-muted-foreground">Nenhum cavalo ainda.</p>}
-            {state.horses.map(h => (
-              <div key={h.id} className="glass rounded-xl p-3 flex items-center gap-3">
-                <span className="text-2xl">🐴</span>
-                <div className="flex-1">
-                  <p className={`font-display text-sm ${RARITY_COLORS[h.rarity]}`}>{h.name}</p>
-                  <p className="text-[10px] text-muted-foreground capitalize">{h.rarity} • {h.isAdult ? 'Adulto' : 'Potro'}</p>
+            <p className="text-sm text-muted-foreground">Seus cavalos ({state.horses.filter(h => !h.dead).length}/2)</p>
+            {state.horses.filter(h => !h.dead).length === 0 && <p className="text-xs text-muted-foreground">Nenhum cavalo vivo.</p>}
+            {state.horses.map(h => {
+              if (h.dead) {
+                return (
+                  <div key={h.id} className="glass rounded-xl p-3 flex items-center gap-3 border border-red-500/30">
+                    <span className="text-2xl grayscale">💀</span>
+                    <div className="flex-1">
+                      <p className="font-display text-sm text-red-400">{h.name} (Morto)</p>
+                      <p className="text-[10px] text-muted-foreground">Morreu de fome</p>
+                    </div>
+                    <button onClick={() => onRemoveDeadHorse(h.id)} className="btn-game text-[10px] px-2 py-1 opacity-70">Remover</button>
+                  </div>
+                );
+              }
+              const hungerPct = Math.max(0, 1 - (Date.now() - h.lastFedAt) / (30 * 60 * 1000));
+              return (
+                <div key={h.id} className="glass rounded-xl p-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🐴</span>
+                    <div className="flex-1">
+                      <p className={`font-display text-sm ${RARITY_COLORS[h.rarity]}`}>{h.name}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">{h.rarity} • {h.isAdult ? 'Adulto' : 'Potro'}</p>
+                    </div>
+                    {!h.isAdult && (
+                      <button onClick={() => onEvolveHorse(h.id)} className="btn-game text-[10px] px-2 py-1">Evoluir</button>
+                    )}
+                  </div>
+                  {/* Hunger bar */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground">🍖 Fome:</span>
+                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${hungerPct > 0.3 ? 'bg-green-500' : hungerPct > 0.1 ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'}`}
+                        style={{ width: `${hungerPct * 100}%` }}
+                      />
+                    </div>
+                    <button onClick={() => onFeedHorse(h.id)} className="btn-game text-[10px] px-2 py-1">Alimentar</button>
+                  </div>
                 </div>
-                {!h.isAdult && (
-                  <button onClick={() => onEvolveHorse(h.id)} className="btn-game text-[10px] px-2 py-1">Evoluir</button>
-                )}
-              </div>
-            ))}
-            {state.horses.length < 2 && (
+              );
+            })}
+            {state.horses.filter(h => !h.dead).length < 2 && (
               <div className="space-y-2">
                 <p className="text-xs font-display text-gold">Comprar Potro:</p>
                 {(['comum', 'raro', 'épico', 'lendário'] as HorseRarity[]).map(r => {
@@ -249,17 +356,19 @@ export default function LocationPanel({
         {/* ========== MERCADO ========== */}
         {location === 'mercado' && (
           <div className="space-y-3">
-            {[{ item: 'Maçã', cost: 5, icon: '🍎' }, { item: 'Frutas', cost: 8, icon: '🍇' }, { item: 'Ração', cost: 10, icon: '🌾' }].map(p => (
+            <p className="text-sm text-muted-foreground">💰 Ouro disponível: {state.gold}</p>
+            {MARKET_ITEMS.map((p, i) => (
               <motion.button
                 key={p.item}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onBuyItem(p.item, p.cost)}
-                className="glass rounded-xl p-4 flex items-center gap-3 w-full animate-float"
-                style={{ animationDelay: `${Math.random()}s` }}
+                className="glass rounded-xl p-4 flex items-center gap-3 w-full"
+                style={{ animationDelay: `${i * 0.1}s` }}
               >
                 <span className="text-2xl">{p.icon}</span>
                 <div className="flex-1 text-left">
                   <p className="font-display text-sm text-foreground">{p.item}</p>
+                  <p className="text-[9px] text-muted-foreground">Estoque: {state.inventory[p.item] || 0}</p>
                 </div>
                 <span className="text-xs font-display text-gold">🪙 {p.cost}</span>
               </motion.button>
@@ -283,28 +392,6 @@ export default function LocationPanel({
           </div>
         )}
 
-        {/* ========== MEDICINA ========== */}
-        {location === 'medicina' && (
-          <div className="space-y-3">
-            {[{ item: 'Vacina Cavalos', cost: 30, icon: '💉' }, { item: 'Vacina Animais', cost: 20, icon: '💊' }].map(p => (
-              <button
-                key={p.item}
-                onClick={() => onBuyItem(p.item, p.cost)}
-                className="glass rounded-xl p-4 flex items-center gap-3 w-full active:scale-95 transition-transform"
-              >
-                <span className="text-2xl">{p.icon}</span>
-                <div className="flex-1 text-left">
-                  <p className="font-display text-sm text-foreground">{p.item}</p>
-                </div>
-                <span className="text-xs font-display text-gold">🪙 {p.cost}</span>
-              </button>
-            ))}
-            <div className="glass rounded-xl p-3 border border-gold/20">
-              <p className="text-xs text-muted-foreground font-display">🧪 Quest: Craftar vacina rara (em breve)</p>
-            </div>
-          </div>
-        )}
-
         {/* ========== PUB ========== */}
         {location === 'pub' && (
           <div className="space-y-3">
@@ -313,10 +400,13 @@ export default function LocationPanel({
               <p className="font-display text-sm text-foreground mt-2">Bem-vindo ao Pub!</p>
               <p className="text-xs text-muted-foreground mt-1">Fumaça leve... música ao fundo...</p>
             </div>
-            {state.questLocations.includes('pub') && (
-              <div className="glass rounded-xl p-3 border border-gold/20 animate-pulse-gold">
-                <p className="text-xs font-display text-gold">💬 Nova quest disponível!</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Fale com o barman para mais detalhes.</p>
+            {state.activeScrollQuest && !state.activeScrollQuest.completed && (
+              <div className="glass rounded-xl p-3 border border-gold/20">
+                <p className="text-xs font-display text-gold">📜 Quest ativa:</p>
+                <p className="text-[10px] text-foreground mt-1">{state.activeScrollQuest.objective.label}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Progresso: {state.activeScrollQuest.progress}/{state.activeScrollQuest.objective.target}
+                </p>
               </div>
             )}
           </div>
