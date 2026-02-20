@@ -35,9 +35,11 @@ export default function VehiclesPanel({ horses, mountedId, onMount, onFeed, onRe
       </div>
       <div className="flex-1 overflow-y-auto p-4 pb-20 space-y-3">
         {horses.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center mt-8">Nenhum cavalo. Visite o Estábulo!</p>
+          <p className="text-sm text-muted-foreground text-center mt-8">Nenhum cavalo. Abra a Caixa Gacha no Inventário!</p>
         )}
-        <p className="text-[10px] text-muted-foreground text-center">⚠️ Você precisa montar um cavalo para viajar!</p>
+        <p className="text-[10px] text-muted-foreground text-center">
+          🚶 Sem cavalo = caminhada lenta. Monte um cavalo para viajar mais rápido!
+        </p>
         {horses.map(h => {
           if (h.dead) {
             return (
@@ -58,7 +60,9 @@ export default function VehiclesPanel({ horses, mountedId, onMount, onFeed, onRe
                 <span className="text-3xl">🐴</span>
                 <div className="flex-1">
                   <p className={`font-display text-sm ${RARITY_TEXT[h.rarity]}`}>{h.name}</p>
-                  <p className="text-[10px] text-muted-foreground capitalize">{h.rarity} • {h.isAdult ? 'Adulto' : 'Potro'}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">
+                    {h.rarity} • {h.isAdult ? 'Adulto' : 'Potro'} • 🏃 Vel: {h.speed}
+                  </p>
                 </div>
                 <button
                   onClick={() => onMount(mountedId === h.id ? null : h.id)}
