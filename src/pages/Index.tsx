@@ -15,7 +15,8 @@ import { toast } from 'sonner';
 export default function Index() {
   const {
     state, startTravel, completeTravel, accelerateTravel,
-    collectTree, buyHorse, evolveHorse, mountHorse,
+    collectTree, plantCrop, harvestCrop, mineGold,
+    buyHorse, evolveHorse, mountHorse,
     collectSurpriseBox, buyItem, goToMap,
   } = useGameState();
 
@@ -23,8 +24,13 @@ export default function Index() {
 
   const handleLocationClick = useCallback((id: LocationId) => {
     if (state.travelingTo) return;
+    // If already at this location, just open it directly
+    if (state.currentLocation === id) {
+      setTab('mapa');
+      return;
+    }
     startTravel(id);
-  }, [state.travelingTo, startTravel]);
+  }, [state.travelingTo, state.currentLocation, startTravel]);
 
   const handleSurpriseBox = useCallback(() => {
     collectSurpriseBox();
@@ -60,6 +66,9 @@ export default function Index() {
               onBuyHorse={buyHorse}
               onEvolveHorse={evolveHorse}
               onBuyItem={buyItem}
+              onPlantCrop={plantCrop}
+              onHarvestCrop={harvestCrop}
+              onMineGold={mineGold}
             />
           )}
           {tab === 'inventario' && <InventoryPanel key="inv" inventory={state.inventory} />}
