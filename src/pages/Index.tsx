@@ -21,11 +21,13 @@ export default function Index() {
   } = useGameState();
 
   const [tab, setTab] = useState<Tab>('mapa');
+  const [viewingMap, setViewingMap] = useState(true);
 
   const handleLocationClick = useCallback((id: LocationId) => {
     if (state.travelingTo) return;
-    // If already at this location, just open it directly
+    // If already at this location, just open the panel directly
     if (state.currentLocation === id) {
+      setViewingMap(false);
       setTab('mapa');
       return;
     }
@@ -40,9 +42,29 @@ export default function Index() {
   }, [collectSurpriseBox]);
 
   const handleTabChange = useCallback((t: Tab) => {
-    if (t === 'mapa') goToMap();
+    if (t === 'mapa') setViewingMap(true);
     setTab(t);
-  }, [goToMap]);
+  }, []);
+
+  const handleBackToMap = useCallback(() => {
+    setViewingMap(true);
+  }, []);
+
+  // When travel completes, auto-open the location panel
+  const handleTravelComplete = useCallback(() => {
+    completeTravel();
+    setViewingMap(false);
+    setTab('mapa');
+  }, [completeTravel]);
+
+  const handleAccelerate = useCallback(() => {
+    accelerateTravel();
+    setViewingMap(false);
+    setTab('mapa');
+  }, [accelerateTravel]);
+
+  const showLocationPanel = tab === 'mapa' && !viewingMap && state.currentLocation;
+  const showMap = tab === 'mapa' && (viewingMap || !state.currentLocation);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-background">
@@ -51,17 +73,17 @@ export default function Index() {
 
       {/* Main content */}
       <div className="absolute inset-0 pt-[65px] pb-[60px]">
-        {tab === 'mapa' && !state.currentLocation && (
+        {showMap && (
           <MapView state={state} onLocationClick={handleLocationClick} onSurpriseBox={handleSurpriseBox} />
         )}
 
         <AnimatePresence mode="wait">
-          {tab === 'mapa' && state.currentLocation && (
+          {showLocationPanel && (
             <LocationPanel
               key={state.currentLocation}
-              location={state.currentLocation}
+              location={state.currentLocation!}
               state={state}
-              onBack={goToMap}
+              onBack={handleBackToMap}
               onCollectTree={collectTree}
               onBuyHorse={buyHorse}
               onEvolveHorse={evolveHorse}
@@ -87,8 +109,8 @@ export default function Index() {
       <TravelBar
         travelingTo={state.travelingTo}
         travelEndTime={state.travelEndTime}
-        onComplete={completeTravel}
-        onAccelerate={accelerateTravel}
+        onComplete={handleTravelComplete}
+        onAccelerate={handleAccelerate}
         diamonds={state.diamonds}
       />
 
