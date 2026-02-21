@@ -1,11 +1,21 @@
 import { motion } from 'framer-motion';
 import type { Horse, HorseRarity } from '@/hooks/useGameState';
+import horsesImg from '@/assets/horses-rarity.png';
+
+const HORSE_SPRITE: Record<string, { row: number; col: number }> = {
+  'comum': { row: 0, col: 0 },
+  'raro': { row: 0, col: 1 },
+  'épico': { row: 1, col: 0 },
+  'lendário': { row: 1, col: 1 },
+  'mítico': { row: 1, col: 1 },
+};
 
 const RARITY_STYLES: Record<HorseRarity, string> = {
   'comum': 'border-rarity-common/40 shadow-[0_0_12px_hsl(var(--rarity-common)/0.3)]',
   'raro': 'border-rarity-rare/40 shadow-[0_0_12px_hsl(var(--rarity-rare)/0.3)]',
   'épico': 'border-rarity-epic/40 shadow-[0_0_12px_hsl(var(--rarity-epic)/0.3)]',
   'lendário': 'border-rarity-legendary/40 shadow-[0_0_16px_hsl(var(--rarity-legendary)/0.4)]',
+  'mítico': 'border-red-500/40 shadow-[0_0_16px_rgba(239,68,68,0.4)]',
 };
 
 const RARITY_TEXT: Record<HorseRarity, string> = {
@@ -13,6 +23,7 @@ const RARITY_TEXT: Record<HorseRarity, string> = {
   'raro': 'text-rarity-rare',
   'épico': 'text-rarity-epic',
   'lendário': 'text-rarity-legendary',
+  'mítico': 'text-red-400',
 };
 
 interface Props {
@@ -54,10 +65,18 @@ export default function VehiclesPanel({ horses, mountedId, onMount, onFeed, onRe
             );
           }
           const hungerPct = Math.max(0, 1 - (Date.now() - h.lastFedAt) / (30 * 60 * 1000));
+          const sprite = HORSE_SPRITE[h.rarity];
           return (
             <div key={h.id} className={`glass rounded-xl p-4 border ${RARITY_STYLES[h.rarity]} space-y-2`}>
               <div className="flex items-center gap-3">
-                <span className="text-3xl">🐴</span>
+                <div
+                  className="w-12 h-12 rounded-full overflow-hidden border-2 border-gold/40"
+                  style={{
+                    backgroundImage: `url(${horsesImg})`,
+                    backgroundSize: '200% 200%',
+                    backgroundPosition: `${sprite.col * 100}% ${sprite.row * 100}%`,
+                  }}
+                />
                 <div className="flex-1">
                   <p className={`font-display text-sm ${RARITY_TEXT[h.rarity]}`}>{h.name}</p>
                   <p className="text-[10px] text-muted-foreground capitalize">

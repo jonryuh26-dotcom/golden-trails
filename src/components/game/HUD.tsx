@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import type { GameState, Weather } from '@/hooks/useGameState';
+import horsesImg from '@/assets/horses-rarity.png';
+
+const HORSE_SPRITE: Record<string, { row: number; col: number }> = {
+  'comum': { row: 0, col: 0 },
+  'raro': { row: 0, col: 1 },
+  'épico': { row: 1, col: 0 },
+  'lendário': { row: 1, col: 1 },
+  'mítico': { row: 1, col: 1 },
+};
 
 interface HUDProps {
   state: GameState;
@@ -41,10 +50,21 @@ export default function HUD({ state }: HUDProps) {
       animate={{ y: 0, opacity: 1 }}
       className="absolute top-0 left-0 right-0 z-30 glass px-3 py-2 flex items-center justify-between safe-area-top"
     >
-      {/* Player */}
+      {/* Player - uses horse image as profile */}
       <div className="flex items-center gap-2">
-        <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-lg animate-pulse-gold border border-gold/30">
-          {mountedHorse ? '🐴' : '🤠'}
+        <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-lg border border-gold/30 overflow-hidden">
+          {mountedHorse ? (
+            <div
+              className="w-full h-full"
+              style={{
+                backgroundImage: `url(${horsesImg})`,
+                backgroundSize: '200% 200%',
+                backgroundPosition: `${HORSE_SPRITE[mountedHorse.rarity].col * 100}% ${HORSE_SPRITE[mountedHorse.rarity].row * 100}%`,
+              }}
+            />
+          ) : (
+            <span className="animate-pulse-gold">🤠</span>
+          )}
         </div>
         <div className="flex flex-col">
           <span className="font-display text-xs gold-text font-semibold leading-tight">{state.playerName}</span>

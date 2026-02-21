@@ -58,6 +58,7 @@ export default {
         "rarity-rare": "hsl(var(--rarity-rare))",
         "rarity-epic": "hsl(var(--rarity-epic))",
         "rarity-legendary": "hsl(var(--rarity-legendary))",
+        "rarity-mythic": "hsl(var(--rarity-mythic))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

@@ -1,6 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import type { LocationId, GameState, ScrollRarity } from '@/hooks/useGameState';
+import type { LocationId, GameState, ScrollRarity, MapId } from '@/hooks/useGameState';
 import mapBg from '@/assets/map-bg.jpg';
+import map2Bg from '@/assets/map2-bg.jpg';
+import gameIcons from '@/assets/game-icons.png';
+import horsesImg from '@/assets/horses-rarity.png';
 
 interface LocationDef {
   id: LocationId;
@@ -9,24 +12,45 @@ interface LocationDef {
   x: number;
   y: number;
   locked?: boolean;
+  // Icon sprite position (row, col) from game-icons.png (4 rows x 3 cols)
+  spritePos?: { row: number; col: number };
 }
 
 const locations: LocationDef[] = [
   { id: 'fazenda', name: 'Fazenda', icon: '🏠', x: 18, y: 22 },
-  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 65, y: 18 }, // moved to old pasto
-  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 12, y: 40 },
-  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 30, y: 52 }, // moved to old mercado
-  { id: 'pub', name: 'Pub', icon: '🍺', x: 62, y: 48 },
+  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 65, y: 18, spritePos: { row: 2, col: 2 } },
+  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 12, y: 40, spritePos: { row: 1, col: 1 } },
+  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 30, y: 52, spritePos: { row: 1, col: 0 } },
+  { id: 'pub', name: 'Pub', icon: '🍺', x: 62, y: 48, spritePos: { row: 3, col: 2 } },
   { id: 'medicina', name: 'Medicina', icon: '🔒', x: 78, y: 35, locked: true },
-  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 20, y: 68 },
-  { id: 'mina', name: 'Mina', icon: '⛏️', x: 75, y: 65 },
-  { id: 'arena', name: 'Arena', icon: '⚔️', x: 55, y: 75 },
+  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 20, y: 68, spritePos: { row: 0, col: 2 } },
+  { id: 'mina', name: 'Mina', icon: '⛏️', x: 75, y: 65, spritePos: { row: 3, col: 0 } },
+  { id: 'arena', name: 'Arena', icon: '⚔️', x: 55, y: 75, spritePos: { row: 1, col: 2 } },
 ];
 
 const SCROLL_AURA: Record<ScrollRarity, string> = {
-  'comum': 'drop-shadow(0 0 8px #22c55e)',
+  'comum': 'drop-shadow(0 0 8px #9ca3af)',
   'raro': 'drop-shadow(0 0 10px #3b82f6)',
   'épico': 'drop-shadow(0 0 12px #a855f7)',
+  'lendário': 'drop-shadow(0 0 14px #f59e0b)',
+  'mítico': 'drop-shadow(0 0 16px #ef4444)',
+};
+
+const SCROLL_BG_GLOW: Record<ScrollRarity, string> = {
+  'comum': 'shadow-[0_0_20px_rgba(156,163,175,0.5)]',
+  'raro': 'shadow-[0_0_20px_rgba(59,130,246,0.5)]',
+  'épico': 'shadow-[0_0_20px_rgba(168,85,247,0.5)]',
+  'lendário': 'shadow-[0_0_20px_rgba(245,158,11,0.5)]',
+  'mítico': 'shadow-[0_0_20px_rgba(239,68,68,0.5)]',
+};
+
+// Horse rarity to sprite position in horses-rarity.png (2x2 grid)
+const HORSE_SPRITE: Record<string, { row: number; col: number }> = {
+  'comum': { row: 0, col: 0 },
+  'raro': { row: 0, col: 1 },
+  'épico': { row: 1, col: 0 },
+  'lendário': { row: 1, col: 1 },
+  'mítico': { row: 1, col: 1 }, // reuse legendary
 };
 
 interface Props {
@@ -34,9 +58,10 @@ interface Props {
   onLocationClick: (id: LocationId) => void;
   onSurpriseBox: () => void;
   onScrollClick: () => void;
+  onTeleport: (mapId: MapId) => void;
 }
 
-export default function MapView({ state, onLocationClick, onSurpriseBox, onScrollClick }: Props) {
+export default function MapView({ state, onLocationClick, onSurpriseBox, onScrollClick, onTeleport }: Props) {
   const isDay = new Date().getHours() >= 6 && new Date().getHours() < 18;
   const surpriseReady = Date.now() >= state.surpriseBoxAvailableAt;
 
@@ -49,17 +74,18 @@ export default function MapView({ state, onLocationClick, onSurpriseBox, onScrol
     }
   };
 
-  // Find location def for current position
   const currentLocDef = state.currentLocation
     ? locations.find(l => l.id === state.currentLocation)
     : null;
 
   const mountedHorse = state.horses.find(h => h.id === state.mountedHorseId && !h.dead);
 
+  const bgImage = state.currentMap === 'map2' ? map2Bg : mapBg;
+
   return (
     <div className="relative w-full h-full overflow-hidden">
       <img
-        src={mapBg}
+        src={bgImage}
         alt="Mapa"
         className="absolute inset-0 w-full h-full object-cover"
         style={{ filter: isDay ? 'brightness(1)' : 'brightness(0.5) saturate(0.7)' }}
@@ -69,6 +95,29 @@ export default function MapView({ state, onLocationClick, onSurpriseBox, onScrol
       {!isDay && <div className="absolute inset-0 bg-blue-950/30 transition-all duration-[3000ms]" />}
       <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-background/30" />
 
+      {/* Map teleport button */}
+      <div className="absolute top-2 right-2 z-20">
+        {state.currentMap === 'map1' ? (
+          <button
+            onClick={() => onTeleport('map2')}
+            className="glass rounded-xl px-3 py-2 flex items-center gap-1.5 active:scale-95 transition-transform"
+          >
+            <span className="text-sm">🌀</span>
+            <span className="text-[9px] font-display text-foreground">Mapa 2</span>
+            <span className="text-[8px] text-diamond font-display">💎5</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => onTeleport('map1')}
+            className="glass rounded-xl px-3 py-2 flex items-center gap-1.5 active:scale-95 transition-transform"
+          >
+            <span className="text-sm">🌀</span>
+            <span className="text-[9px] font-display text-foreground">Mapa 1</span>
+            <span className="text-[8px] text-muted-foreground font-display">Grátis</span>
+          </button>
+        )}
+      </div>
+
       {/* Player position marker */}
       {currentLocDef && (
         <motion.div
@@ -77,9 +126,24 @@ export default function MapView({ state, onLocationClick, onSurpriseBox, onScrol
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
         >
-          <span className="text-xl" style={{ filter: 'drop-shadow(0 0 6px #22c55e)' }}>
-            {mountedHorse ? '🐴' : '🤠'}
-          </span>
+          {mountedHorse ? (
+            <div
+              className="w-8 h-8 rounded-full border-2 border-gold overflow-hidden"
+              style={{ filter: 'drop-shadow(0 0 6px #22c55e)', boxShadow: '0 0 12px rgba(34,197,94,0.4)' }}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  backgroundImage: `url(${horsesImg})`,
+                  backgroundSize: '200% 200%',
+                  backgroundPosition: `${HORSE_SPRITE[mountedHorse.rarity].col * 100}% ${HORSE_SPRITE[mountedHorse.rarity].row * 100}%`,
+                }}
+              />
+            </div>
+          ) : (
+            <span className="text-xl" style={{ filter: 'drop-shadow(0 0 6px #22c55e)' }}>🤠</span>
+          )}
           <span className="text-[8px] font-display text-green-400 bg-background/70 px-1.5 py-0.5 rounded-full mt-0.5">
             📍 Você está aqui
           </span>
@@ -105,15 +169,28 @@ export default function MapView({ state, onLocationClick, onSurpriseBox, onScrol
           >
             {isRaided && (
               <span className="absolute -top-4 text-sm animate-bounce-gentle" style={{ filter: 'drop-shadow(0 0 4px #ef4444)' }}>
-                ⚔️
+                ♟️
               </span>
             )}
-            <span
-              className={`text-2xl ${loc.locked ? 'grayscale opacity-50' : ''} ${isRaided ? 'opacity-50' : ''}`}
-              style={{ filter: loc.locked ? 'none' : 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))' }}
-            >
-              {loc.icon}
-            </span>
+            {loc.spritePos ? (
+              <div
+                className={`w-10 h-10 rounded-full overflow-hidden border-2 border-gold/60 ${loc.locked ? 'grayscale opacity-50' : ''} ${isRaided ? 'opacity-50' : ''}`}
+                style={{ 
+                  backgroundImage: `url(${gameIcons})`,
+                  backgroundSize: '300% 400%',
+                  backgroundPosition: `${loc.spritePos.col * 50}% ${loc.spritePos.row * 33.33}%`,
+                  filter: loc.locked ? 'grayscale(1)' : 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))',
+                  boxShadow: !loc.locked && !isRaided ? '0 0 8px hsla(40, 80%, 50%, 0.3)' : undefined,
+                }}
+              />
+            ) : (
+              <span
+                className={`text-2xl ${loc.locked ? 'grayscale opacity-50' : ''} ${isRaided ? 'opacity-50' : ''}`}
+                style={{ filter: loc.locked ? 'none' : 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))' }}
+              >
+                {loc.icon}
+              </span>
+            )}
             <span className={`glass px-2 py-0.5 rounded-md text-[9px] font-display text-foreground mt-0.5 whitespace-nowrap ${loc.locked ? 'opacity-50' : ''}`}>
               {loc.locked ? '🔒 Bloqueado' : loc.name}
             </span>
@@ -132,7 +209,7 @@ export default function MapView({ state, onLocationClick, onSurpriseBox, onScrol
             animate={{ scale: 1, rotate: 0 }}
             exit={{ scale: 0, opacity: 0 }}
             onClick={onScrollClick}
-            className="absolute z-10 animate-float"
+            className={`absolute z-10 animate-float rounded-full ${SCROLL_BG_GLOW[state.activeScrollQuest.rarity]}`}
             style={{
               left: `${state.activeScrollQuest.mapX}%`,
               top: `${state.activeScrollQuest.mapY}%`,
@@ -147,7 +224,7 @@ export default function MapView({ state, onLocationClick, onSurpriseBox, onScrol
               📜
             </span>
             <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[8px] font-display text-gold whitespace-nowrap">
-              Quest!
+              {state.activeScrollQuest.rarity.charAt(0).toUpperCase() + state.activeScrollQuest.rarity.slice(1)}
             </span>
           </motion.button>
         )}
