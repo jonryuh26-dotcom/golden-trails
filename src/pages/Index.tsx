@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { useGameState, type LocationId, type HorseRarity } from '@/hooks/useGameState';
+import { useGameState, type LocationId, type HorseRarity, type MapId, type PastureAnimalType } from '@/hooks/useGameState';
 import HUD from '@/components/game/HUD';
 import InfluenceBar from '@/components/game/InfluenceBar';
 import BottomNav, { type Tab } from '@/components/game/BottomNav';
@@ -21,6 +21,8 @@ export default function Index() {
     buyHorse, evolveHorse, mountHorse, feedHorse, removeDeadHorse,
     addGachaHorse,
     collectSurpriseBox, buyItem, goToMap, useShield, pickupScroll,
+    teleportToMap,
+    buyPastureAnimal, feedPastureAnimal, vaccinateAnimal, collectMilk, removeDeadAnimal,
   } = useGameState();
 
   const [tab, setTab] = useState<Tab>('mapa');
@@ -88,6 +90,10 @@ export default function Index() {
     addGachaHorse(rarity, name);
   }, [addGachaHorse]);
 
+  const handleTeleport = useCallback((mapId: MapId) => {
+    teleportToMap(mapId);
+  }, [teleportToMap]);
+
   const showLocationPanel = tab === 'mapa' && !viewingMap && state.currentLocation;
   const showMap = tab === 'mapa' && (viewingMap || !state.currentLocation);
 
@@ -103,6 +109,7 @@ export default function Index() {
             onLocationClick={handleLocationClick}
             onSurpriseBox={handleSurpriseBox}
             onScrollClick={handleScrollClick}
+            onTeleport={handleTeleport}
           />
         )}
 
@@ -124,24 +131,18 @@ export default function Index() {
               onFeedHorse={feedHorse}
               onRemoveDeadHorse={removeDeadHorse}
               onUseShield={useShield}
+              onBuyAnimal={buyPastureAnimal}
+              onFeedAnimal={feedPastureAnimal}
+              onVaccinateAnimal={vaccinateAnimal}
+              onCollectMilk={collectMilk}
+              onRemoveDeadAnimal={removeDeadAnimal}
             />
           )}
           {tab === 'inventario' && (
-            <InventoryPanel
-              key="inv"
-              inventory={state.inventory}
-              onOpenGacha={handleOpenGacha}
-            />
+            <InventoryPanel key="inv" inventory={state.inventory} onOpenGacha={handleOpenGacha} />
           )}
           {tab === 'veiculos' && (
-            <VehiclesPanel
-              key="veh"
-              horses={state.horses}
-              mountedId={state.mountedHorseId}
-              onMount={mountHorse}
-              onFeed={feedHorse}
-              onRemoveDead={removeDeadHorse}
-            />
+            <VehiclesPanel key="veh" horses={state.horses} mountedId={state.mountedHorseId} onMount={mountHorse} onFeed={feedHorse} onRemoveDead={removeDeadHorse} />
           )}
           {tab === 'quests' && <QuestsPanel key="q" state={state} />}
           {tab === 'config' && (
@@ -154,7 +155,6 @@ export default function Index() {
         </AnimatePresence>
       </div>
 
-      {/* Collection progress bar */}
       <CollectionBar collection={state.activeCollection} />
 
       <TravelBar

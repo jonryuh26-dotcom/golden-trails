@@ -46,6 +46,7 @@
     --rarity-rare: 210 80% 55%;
     --rarity-epic: 280 70% 55%;
     --rarity-legendary: 40 90% 55%;
+    --rarity-mythic: 0 70% 55%;
 
     --glass-bg: 30 20% 12% / 0.7;
     --glass-border: 40 30% 30% / 0.3;
