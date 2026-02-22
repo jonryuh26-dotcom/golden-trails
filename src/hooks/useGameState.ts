@@ -87,7 +87,7 @@ export interface CollectionProgress {
 
 export type Weather = 'clear' | 'rain' | 'snow' | 'drought';
 export type LocationId = 'fazenda' | 'pasto' | 'estabulo' | 'mercado' | 'medicina' | 'pub' | 'floresta' | 'mina' | 'arena';
-export type MapId = 'map1' | 'map2';
+export type MapId = 'map1' | 'map2' | 'map3';
 
 export interface GameState {
   playerName: string;
@@ -538,10 +538,7 @@ export function useGameState() {
       notify('🔒 Área não desbloqueada ainda.', 'error');
       return;
     }
-    if (isAreaRaided(locationId)) {
-      notify('⚔️ Essa área está sob ataque! Use um Escudo ou aguarde.', 'error');
-      return;
-    }
+    // Raid check moved to MapView shield prompt
     const travelTime = getTravelTime();
     setState(s => ({
       ...s,
@@ -830,19 +827,21 @@ export function useGameState() {
     setState(s => ({ ...s, currentLocation: null }));
   }, []);
 
-  // Teleport to second map (costs 5 diamonds)
+  // Teleport to another map (costs 5 diamonds except returning to map1)
   const teleportToMap = useCallback((mapId: MapId) => {
     setState(s => {
       if (s.currentMap === mapId) return s;
-      if (mapId === 'map2' && s.diamonds < 5) {
+      const cost = mapId === 'map1' ? 0 : 5;
+      if (cost > 0 && s.diamonds < cost) {
         return { ...s, lastNotification: { message: '❌ Você precisa de 5 diamantes para teleportar!', type: 'error' as const, at: Date.now() } };
       }
+      const mapNames: Record<MapId, string> = { map1: 'Mapa 1', map2: 'Mapa 2', map3: 'Mapa 3' };
       return {
         ...s,
-        diamonds: mapId === 'map2' ? s.diamonds - 5 : s.diamonds,
+        diamonds: s.diamonds - cost,
         currentMap: mapId,
         currentLocation: null,
-        lastNotification: { message: mapId === 'map2' ? '🌀 Teleportado para o Segundo Mapa!' : '🌀 Voltou ao Mapa Principal!', type: 'success', at: Date.now() },
+        lastNotification: { message: `🌀 Teleportado para ${mapNames[mapId]}!`, type: 'success', at: Date.now() },
       };
     });
   }, []);

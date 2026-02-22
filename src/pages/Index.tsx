@@ -110,6 +110,7 @@ export default function Index() {
             onSurpriseBox={handleSurpriseBox}
             onScrollClick={handleScrollClick}
             onTeleport={handleTeleport}
+            onUseShield={useShield}
           />
         )}
 
