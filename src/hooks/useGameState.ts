@@ -89,6 +89,29 @@ export type Weather = 'clear' | 'rain' | 'snow' | 'drought';
 export type LocationId = 'fazenda' | 'pasto' | 'estabulo' | 'mercado' | 'medicina' | 'pub' | 'floresta' | 'mina' | 'arena';
 export type MapId = 'map1' | 'map2' | 'map3';
 
+export type CardRarity = 'comum' | 'raro' | 'épico' | 'lendário' | 'mítico';
+export type CardBonusType = 'resource_production' | 'morale_boost' | 'gold_find' | 'defense' | 'speed';
+
+export interface ExplorationCard {
+  id: string;
+  name: string;
+  rarity: CardRarity;
+  bonusType: CardBonusType;
+  bonusValue: number;
+  description: string;
+  image: string; // 'pub' | 'coffee' | 'mystery' etc
+}
+
+export const CARD_DEFINITIONS: ExplorationCard[] = [
+  { id: 'card_pub', name: 'Pub', rarity: 'raro', bonusType: 'morale_boost', bonusValue: 40, description: 'O moral da tropa aumenta com bebidas!', image: 'pub' },
+  { id: 'card_coffee', name: 'Coffee', rarity: 'comum', bonusType: 'resource_production', bonusValue: 7, description: 'Café acelera a produção de recursos.', image: 'coffee' },
+  { id: 'card_shield_master', name: 'Mestre Escudo', rarity: 'épico', bonusType: 'defense', bonusValue: 25, description: 'Defesa aprimorada contra invasões.', image: 'mystery' },
+  { id: 'card_swift_wind', name: 'Vento Veloz', rarity: 'lendário', bonusType: 'speed', bonusValue: 30, description: 'Cavalos se movem mais rápido.', image: 'mystery' },
+  { id: 'card_gold_touch', name: 'Toque Dourado', rarity: 'épico', bonusType: 'gold_find', bonusValue: 15, description: 'Encontre mais ouro em expedições.', image: 'mystery' },
+  { id: 'card_harvest_moon', name: 'Lua da Colheita', rarity: 'raro', bonusType: 'resource_production', bonusValue: 12, description: 'Colheitas rendem mais.', image: 'mystery' },
+  { id: 'card_war_horn', name: 'Corneta de Guerra', rarity: 'mítico', bonusType: 'morale_boost', bonusValue: 60, description: 'O som ecoa por toda a terra.', image: 'mystery' },
+];
+
 export interface GameState {
   playerName: string;
   level: number;
@@ -101,6 +124,9 @@ export interface GameState {
   mountedHorseId: string | null;
   pastureAnimals: PastureAnimal[];
   inventory: Record<string, number>;
+  cards: Record<string, number>; // cardId -> quantity
+  equippedCardId: string | null;
+  explorationSlotDestroyed: boolean;
   trees: { available: boolean; cooldownEnd: number | null }[];
   herbs: HerbNode[];
   crops: CropPlot[];
@@ -118,7 +144,6 @@ export interface GameState {
   lastNotification: { message: string; type: 'success' | 'error' | 'warning'; at: number } | null;
   currentMap: MapId;
   completedScrollQuests: number;
-  // animals legacy compat
   animals: { id: string; type: string; hungry: boolean }[];
 }
 
@@ -272,6 +297,9 @@ const initialState: GameState = {
   pastureAnimals: [],
   animals: [],
   inventory: { 'Madeira': 3, 'Caixa Gacha Cavalo': 1 },
+  cards: { 'card_coffee': 1, 'card_pub': 1 },
+  equippedCardId: null,
+  explorationSlotDestroyed: false,
   trees: [
     { available: true, cooldownEnd: null },
     { available: true, cooldownEnd: null },
@@ -925,6 +953,71 @@ export function useGameState() {
     }));
   }, []);
 
+  const equipCard = useCallback((cardId: string | null) => {
+    setState(s => {
+      if (s.explorationSlotDestroyed) {
+        return { ...s, lastNotification: { message: '❌ Slot de exploração destruído! Reconstrua primeiro.', type: 'error' as const, at: Date.now() } };
+      }
+      if (cardId && !(s.cards[cardId] > 0)) {
+        return { ...s, lastNotification: { message: '❌ Você não possui essa carta.', type: 'error' as const, at: Date.now() } };
+      }
+      const card = cardId ? CARD_DEFINITIONS.find(c => c.id === cardId) : null;
+      return {
+        ...s,
+        equippedCardId: cardId,
+        lastNotification: card
+          ? { message: `🃏 ${card.name} equipada! +${card.bonusValue}% ${card.bonusType.replace('_', ' ')}`, type: 'success' as const, at: Date.now() }
+          : { message: '🃏 Carta removida do slot.', type: 'success' as const, at: Date.now() },
+      };
+    });
+  }, []);
+
+  const repairExplorationSlot = useCallback(() => {
+    setState(s => {
+      const cost = 50;
+      if (s.gold < cost) {
+        return { ...s, lastNotification: { message: '❌ 50 ouro necessários para reparar o slot.', type: 'error' as const, at: Date.now() } };
+      }
+      return {
+        ...s,
+        gold: s.gold - cost,
+        explorationSlotDestroyed: false,
+        lastNotification: { message: '🔧 Slot de exploração reparado!', type: 'success' as const, at: Date.now() },
+      };
+    });
+  }, []);
+
+  // Card loss on raid (called when raid hits and card is equipped)
+  const raidCardLoss = useCallback(() => {
+    setState(s => {
+      if (!s.equippedCardId) return s;
+      const roll = Math.random();
+      if (roll < 0.4) {
+        // Lose card only
+        const cardId = s.equippedCardId;
+        const newCards = { ...s.cards, [cardId]: Math.max(0, (s.cards[cardId] || 0) - 1) };
+        return {
+          ...s,
+          cards: newCards,
+          equippedCardId: null,
+          lastNotification: { message: '💔 Sua carta equipada foi perdida no ataque!', type: 'error' as const, at: Date.now() },
+        };
+      } else if (roll < 0.6) {
+        // Destroy slot
+        const cardId = s.equippedCardId;
+        const newCards = { ...s.cards, [cardId]: Math.max(0, (s.cards[cardId] || 0) - 1) };
+        return {
+          ...s,
+          cards: newCards,
+          equippedCardId: null,
+          explorationSlotDestroyed: true,
+          lastNotification: { message: '💥 Seu slot de exploração foi destruído!', type: 'error' as const, at: Date.now() },
+        };
+      }
+      return s;
+    });
+  }, []);
+
   return {
     state,
     startTravel, completeTravel, accelerateTravel,
@@ -937,5 +1030,6 @@ export function useGameState() {
     goToMap, getMountedHorse, getTravelTime, isAreaRaided,
     teleportToMap,
     buyPastureAnimal, feedPastureAnimal, vaccinateAnimal, collectMilk, removeDeadAnimal,
+    equipCard, repairExplorationSlot, raidCardLoss,
   };
 }

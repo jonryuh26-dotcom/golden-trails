@@ -17,41 +17,41 @@ interface LocationDef {
   spritePos?: { row: number; col: number };
 }
 
-// Icon positions matched to scene elements on each map
+// Based on reference screenshot: icons placed on scene elements with spacing
 const MAP1_LOCATIONS: LocationDef[] = [
-  { id: 'fazenda', name: 'Fazenda', icon: '🏠', x: 15, y: 18 },
-  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 50, y: 38, spritePos: { row: 2, col: 2 } },
-  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 80, y: 20, spritePos: { row: 1, col: 1 } },
-  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 82, y: 12, spritePos: { row: 1, col: 0 } },
-  { id: 'pub', name: 'Pub', icon: '🍺', x: 70, y: 82, spritePos: { row: 3, col: 2 } },
-  { id: 'medicina', name: 'Medicina', icon: '🔒', x: 30, y: 60, locked: true },
-  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 12, y: 42, spritePos: { row: 0, col: 2 } },
-  { id: 'mina', name: 'Mina', icon: '⛏️', x: 18, y: 72, spritePos: { row: 3, col: 0 } },
-  { id: 'arena', name: 'Arena', icon: '⚔️', x: 85, y: 55, spritePos: { row: 1, col: 2 } },
+  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 28, y: 25, spritePos: { row: 0, col: 2 } },
+  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 62, y: 28, spritePos: { row: 1, col: 0 } },
+  { id: 'fazenda', name: 'Fazenda', icon: '🏠', x: 14, y: 40 },
+  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 42, y: 48, spritePos: { row: 2, col: 2 } },
+  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 68, y: 55, spritePos: { row: 1, col: 1 } },
+  { id: 'medicina', name: 'Medicina', icon: '🔒', x: 18, y: 65, locked: true },
+  { id: 'mina', name: 'Mina', icon: '⛏️', x: 82, y: 42, spritePos: { row: 3, col: 0 } },
+  { id: 'pub', name: 'Pub', icon: '🍺', x: 48, y: 75, spritePos: { row: 3, col: 2 } },
+  { id: 'arena', name: 'Arena', icon: '⚔️', x: 78, y: 72, spritePos: { row: 1, col: 2 } },
 ];
 
 const MAP2_LOCATIONS: LocationDef[] = [
-  { id: 'fazenda', name: 'Fazenda', icon: '🏠', x: 14, y: 20 },
-  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 48, y: 35, spritePos: { row: 2, col: 2 } },
-  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 78, y: 22, spritePos: { row: 1, col: 1 } },
-  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 80, y: 14, spritePos: { row: 1, col: 0 } },
-  { id: 'pub', name: 'Pub', icon: '🍺', x: 68, y: 84, spritePos: { row: 3, col: 2 } },
-  { id: 'medicina', name: 'Medicina', icon: '🔒', x: 32, y: 58, locked: true },
-  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 10, y: 40, spritePos: { row: 0, col: 2 } },
-  { id: 'mina', name: 'Mina', icon: '⛏️', x: 20, y: 70, spritePos: { row: 3, col: 0 } },
-  { id: 'arena', name: 'Arena', icon: '⚔️', x: 82, y: 52, spritePos: { row: 1, col: 2 } },
+  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 22, y: 22, spritePos: { row: 0, col: 2 } },
+  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 72, y: 18, spritePos: { row: 1, col: 0 } },
+  { id: 'fazenda', name: 'Fazenda', icon: '🏠', x: 15, y: 45 },
+  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 50, y: 38, spritePos: { row: 2, col: 2 } },
+  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 75, y: 50, spritePos: { row: 1, col: 1 } },
+  { id: 'medicina', name: 'Medicina', icon: '🔒', x: 28, y: 62, locked: true },
+  { id: 'mina', name: 'Mina', icon: '⛏️', x: 80, y: 35, spritePos: { row: 3, col: 0 } },
+  { id: 'pub', name: 'Pub', icon: '🍺', x: 45, y: 78, spritePos: { row: 3, col: 2 } },
+  { id: 'arena', name: 'Arena', icon: '⚔️', x: 72, y: 68, spritePos: { row: 1, col: 2 } },
 ];
 
 const MAP3_LOCATIONS: LocationDef[] = [
-  { id: 'fazenda', name: 'Fazenda', icon: '🏠', x: 16, y: 22 },
-  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 52, y: 40, spritePos: { row: 2, col: 2 } },
-  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 76, y: 18, spritePos: { row: 1, col: 1 } },
-  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 78, y: 10, spritePos: { row: 1, col: 0 } },
-  { id: 'pub', name: 'Pub', icon: '🍺', x: 65, y: 86, spritePos: { row: 3, col: 2 } },
-  { id: 'medicina', name: 'Medicina', icon: '🔒', x: 28, y: 55, locked: true },
-  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 14, y: 38, spritePos: { row: 0, col: 2 } },
-  { id: 'mina', name: 'Mina', icon: '⛏️', x: 22, y: 68, spritePos: { row: 3, col: 0 } },
-  { id: 'arena', name: 'Arena', icon: '⚔️', x: 84, y: 50, spritePos: { row: 1, col: 2 } },
+  { id: 'floresta', name: 'Floresta', icon: '🌲', x: 20, y: 20, spritePos: { row: 0, col: 2 } },
+  { id: 'pasto', name: 'Pasto', icon: '🐄', x: 68, y: 15, spritePos: { row: 1, col: 0 } },
+  { id: 'fazenda', name: 'Fazenda', icon: '🏠', x: 12, y: 42 },
+  { id: 'mercado', name: 'Mercado', icon: '🏪', x: 48, y: 35, spritePos: { row: 2, col: 2 } },
+  { id: 'estabulo', name: 'Estábulo', icon: '🐴', x: 78, y: 48, spritePos: { row: 1, col: 1 } },
+  { id: 'medicina', name: 'Medicina', icon: '🔒', x: 25, y: 58, locked: true },
+  { id: 'mina', name: 'Mina', icon: '⛏️', x: 82, y: 30, spritePos: { row: 3, col: 0 } },
+  { id: 'pub', name: 'Pub', icon: '🍺', x: 42, y: 80, spritePos: { row: 3, col: 2 } },
+  { id: 'arena', name: 'Arena', icon: '⚔️', x: 75, y: 65, spritePos: { row: 1, col: 2 } },
 ];
 
 const MAP_LOCATIONS: Record<MapId, LocationDef[]> = {

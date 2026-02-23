@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 
-export type Tab = 'mapa' | 'inventario' | 'quests' | 'veiculos' | 'config';
+export type Tab = 'mapa' | 'inventario' | 'quests' | 'veiculos' | 'cartas' | 'config';
 
 interface Props {
   active: Tab;
@@ -10,9 +10,9 @@ interface Props {
 const tabs: { id: Tab; icon: string; label: string }[] = [
   { id: 'mapa', icon: '🗺️', label: 'Mapa' },
   { id: 'inventario', icon: '🎒', label: 'Inventário' },
-  { id: 'quests', icon: '📜', label: 'Quests' },
+  { id: 'cartas', icon: '🃏', label: 'Cartas' },
   { id: 'veiculos', icon: '🐎', label: 'Veículos' },
-  { id: 'config', icon: '⚙️', label: 'Config' },
+  { id: 'quests', icon: '📜', label: 'Quests' },
 ];
 
 export default function BottomNav({ active, onTabChange }: Props) {
