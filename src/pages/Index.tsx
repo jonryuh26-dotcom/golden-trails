@@ -12,6 +12,8 @@ import VehiclesPanel from '@/components/game/VehiclesPanel';
 import QuestsPanel from '@/components/game/QuestsPanel';
 import CollectionBar from '@/components/game/CollectionBar';
 import GachaModal from '@/components/game/GachaModal';
+import ExploreHUD from '@/components/game/ExploreHUD';
+import CardGallery from '@/components/game/CardGallery';
 import { toast } from 'sonner';
 
 export default function Index() {
@@ -23,11 +25,13 @@ export default function Index() {
     collectSurpriseBox, buyItem, goToMap, useShield, pickupScroll,
     teleportToMap,
     buyPastureAnimal, feedPastureAnimal, vaccinateAnimal, collectMilk, removeDeadAnimal,
+    equipCard, repairExplorationSlot, raidCardLoss,
   } = useGameState();
 
   const [tab, setTab] = useState<Tab>('mapa');
   const [viewingMap, setViewingMap] = useState(true);
   const [gachaOpen, setGachaOpen] = useState(false);
+  const [exploreTarget, setExploreTarget] = useState<LocationId | null>(null);
 
   useEffect(() => {
     if (state.lastNotification) {
@@ -47,8 +51,15 @@ export default function Index() {
       setTab('mapa');
       return;
     }
-    startTravel(id);
-  }, [state.travelingTo, state.currentLocation, startTravel]);
+    // Show explore HUD before traveling
+    setExploreTarget(id);
+  }, [state.travelingTo, state.currentLocation]);
+
+  const handleExploreConfirm = useCallback(() => {
+    if (!exploreTarget) return;
+    startTravel(exploreTarget);
+    setExploreTarget(null);
+  }, [exploreTarget, startTravel]);
 
   const handleSurpriseBox = useCallback(() => {
     collectSurpriseBox();
@@ -146,13 +157,7 @@ export default function Index() {
             <VehiclesPanel key="veh" horses={state.horses} mountedId={state.mountedHorseId} onMount={mountHorse} onFeed={feedHorse} onRemoveDead={removeDeadHorse} />
           )}
           {tab === 'quests' && <QuestsPanel key="q" state={state} />}
-          {tab === 'config' && (
-            <div key="cfg" className="absolute inset-0 z-20 bg-background/95 flex flex-col items-center justify-center">
-              <span className="text-4xl">⚙️</span>
-              <p className="font-display text-sm text-foreground mt-3">Configurações</p>
-              <p className="text-xs text-muted-foreground mt-1">Em desenvolvimento...</p>
-            </div>
-          )}
+          {tab === 'cartas' && <CardGallery key="cards" state={state} />}
         </AnimatePresence>
       </div>
 
@@ -173,6 +178,21 @@ export default function Index() {
         onClose={() => setGachaOpen(false)}
         onResult={handleGachaResult}
       />
+
+      {/* Explore confirmation HUD */}
+      <AnimatePresence>
+        {exploreTarget && (
+          <ExploreHUD
+            key="explore"
+            location={exploreTarget}
+            state={state}
+            onConfirm={handleExploreConfirm}
+            onCancel={() => setExploreTarget(null)}
+            onEquipCard={equipCard}
+            onRepairSlot={repairExplorationSlot}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
